@@ -1,0 +1,12 @@
+Solar Logger File Created 
+2017-12-16 23:05:21 LOGGER FILE
+2017-12-16 23:05:24 Renamed Data column to Date
+2017-12-16 23:05:29 Number of rows ommitted =  0
+2017-12-16 23:05:32 Removed UNIXTime from Data.
+2017-12-16 23:05:52 Added WeekNumber column.
+2017-12-16 23:05:52 Added WndDirFact column.
+2017-12-16 23:06:02 Created Solar1.csv - Cleaned Version of Original
+2017-12-16 23:06:02 Created Solar2.csv - Average Values by Hour
+2017-12-16 23:06:02 Created Solar3.csv - Average Values by Week
+2017-12-16 23:06:02 Created Solar4.csv - Average Values by Week-Hour
+2017-12-16 23:06:04 Total Run Time =  46.6605 seconds.

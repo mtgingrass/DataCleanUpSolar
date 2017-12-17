@@ -1,0 +1,338 @@
+---
+title: "Predicting Solar Radiation Levels"
+author: "Mark Gingrass; Karen Roberts; Jason Papayik"
+date: "November 13,2017"
+output:
+  word_document: default
+  html_notebook: default
+  pdf_document: default
+  html_document: default
+---
+
+## Introduction  
+This is the introduction section. Let's start here.  Blah blah more stuff. Another sentence and more stuff to fill the gap. Fix later. 
+
+#### Motivation for the Project  
+Why are we motivated to do this project...blah blah. New sentence.  
+
+#### Question to Answer  
+The goal is to use the historical data to correctly predict the levels of solar radiation.  Currently the best prediction using cross-validation was achieved by someone on Kaggle with a 55% accuracy.  
+
+#### About the Data Set
+
+The data obtained from the [Kaggle site](https://www.kaggle.com/dronio/SolarEnergy) is in **.csv** format and has to be imported into R Studio using the read.csv function:
+`R Solar=read.csv(file="SolarPrediction.csv", header=TRUE)`. We get a glimpse of the data and data types using the **head** function: 
+
+- UNIXTime (int) - Number of seconds since Jan 1, 1970 [^1]
+- Data (fctr) - MM/DD/YYY 12:00:00 AM
+- Time (fctr) - Hawaii time (HH:MM:SS)
+- Radiation (dbl) - $watts / meter{^2}$
+- Temperature (int) - degrees Fahrenheit
+- Pressure (dbl) - unknown
+- Humidity (int) - percent
+- WindDireciton.Degrees. (dbl) degrees
+- Speed (dbl) - $miles/hour$
+- TimeSunRise (fctr) - Hawaii time (HH:MM:SS)
+- TimeSunSet (fctr) - Hawaii time (HH:MM:SS)  
+
+[^1]: Unix time (also known as POSIX time or epoch time) is a system for describing a point in time, defined as the number of seconds that have elapsed since 00:00:00 Coordinated Universal Time (UTC), Thursday, 1 January 1970, minus the number of leap seconds that have taken place since then. [Wikipedia](https://en.wikipedia.org/wiki/Unix_time)
+
+The user must only change the **UserWD** variable created. 
+```{r, message=FALSE, warning=FALSE}
+#Set Up of Enviornment
+StartTime = Sys.time()
+
+#Set Working Directories based on User
+#Set this directory to where the SolarPrediction.csv is located.
+MarkSetWDPC = 
+  "C:/Users/canton/Downloads/solar-radiation-prediction/"
+MarkSetWDMac =  
+  "/Users/mark/Desktop/UCO/Data Mining and Machine Learning/Kaggle Project/"
+
+#Who is working on file
+UserWD = MarkSetWDMac     # Set this before running code
+```
+
+We created a logger function that keeps track of potential warnings, errors, or added information. The logger is designed to capture all logs on a particular date. When a new day occurs, the logger will create a new logger file for that day. This file will be created in the local working directory and named SOLAR_LOGGER YYYY-MM-DD.txt (where YYYY-MM-DD is the year, month, and date of exuection of code). 
+
+The logger function allows for the option to specify if the logged action is for information only, denoted by a typeError = 1, warning, denoted by typeError = 2, and error as typeError = 3, which haults further execution of code. The logger function is mainly used for the developer to track potential problems a user might have. 
+
+For example, if a user tried to run the code without SolarPrediction.csv in the working directory, the function function.logger("File missing. stop() called.", 3) is called. This logs the fact that the file is missing and to hault execution of any further code (no point in exuecting code without the data!)
+```{r, message=FALSE, warning=FALSE}
+#Set up a logger file system
+LoggerFile = "SOLAR_LOGGER"
+
+#Create a log file using LoggerFile + Append today's Date
+fileDate = paste(LoggerFile, Sys.Date(), sep = " ")
+fileDate = paste(fileDate, ".txt")
+
+#Create Daily Log File
+if (!file.exists(fileDate)){
+  write("Solar Logger File Created ", 
+        fileDate)
+} else {
+  if (existsFunction("function.logger")){
+    function.logger("File overwrite denied!",2)
+  } else {
+    warning("function.logger() Not Executed Yet")
+  }
+}
+
+#Logger Function
+function.logger = function(logInput = "No Input Defined", typeError = 1) {
+  lineAppend = paste(Sys.time() , logInput, sep = " ")
+  
+  if (typeError == 1){
+    message("See Logger")
+  }
+  if(typeError == 2){
+    warning("See Logger")
+  }
+  if (typeError == 3){
+    stop("EXECUTION STOPPED: See Logger")
+  }
+  
+  write(lineAppend, file = fileDate, append = TRUE)
+}
+
+function.logger("LOGGER FILE")
+```
+
+To ensure the SolarPrediciton.csv file was read into R, we used the convience of a function called *file.exists(). If the function returs TRUE, then execution continues. If the function returns FALSE, the logger logs "File missing. stop() called." and stops the execution of any further code. 
+
+To ensure all libraries required are installed on the users computer, we used the if(!require("package")){} code block. If the package is required and it's not loaded, it will proceeed to install the required package, load the proper libary, and finally log the actions in the logger. 
+
+```{r, message=FALSE, warning=FALSE}
+#Import Data / Add Libraries
+
+SolarCSV = "SolarPrediction.csv"
+if (file.exists(paste(UserWD, SolarCSV, sep =""))){
+  Solar = read.csv(file = paste(UserWD, "SolarPrediction.csv", sep = ""), header=TRUE)
+} else {
+  function.logger("File missing. stop() called.", 3)
+}
+
+#Rename "Data" field to 'Date' for readability
+names(Solar)[names(Solar) == 'Data'] = 'Date'
+function.logger("Renamed Data column to Date")
+
+attach(Solar)
+
+#Libraries
+if(!require(chron)){ 
+  install.packages("chron") 
+  library(chron)
+  function.logger("Installed chron package.", 1)
+}
+
+if(!require(tseries)){ install.packages("tseries")
+  library(tseries)
+  function.logger("Installed tseries package.", 1)
+}
+
+if(!require(data.table)){ install.packages("data.table")
+  library(data.table) 
+  function.logger("Installed data.table package.", 1)
+}
+
+```
+
+Using the *head* function, we can get a feel for what the data looks like.
+
+```{r Names, message=FALSE, warning=FALSE}
+head(Solar)
+```
+
+The *UNIXTime* is not in a human readable format. Also, *Data* shows the date and time combination; however, the time is always showing 12:00:00 AM. We removed the time portion of *Data* and the entire *UNIXTime* column. Finally, we renamed *Data* to just *Date*.
+
+```{r, message=FALSE, warning=FALSE}
+#Check for any NA's in data
+beforeDim = dim(Solar)
+Solar = na.omit(Solar)
+afterDim = dim(Solar)
+
+line = paste("Number of rows ommitted = ", beforeDim[1] - afterDim[1])
+function.logger(line, 1)
+```
+There are 12 observations per hour every day from 9/1/2016 to 12/31/2016. Using na.omit and dim functions, as above code shows, we verified there are no missing data or *NA's* in the data set totaling 32,686 observations with 10 predictor variables and 1 response variable, **Radiation**. 
+
+To help clean up the data, we convereted some datatypes and removed redundant data. The parameter *UNIXTime* was removed from the data and *DayLength* was added. All clock times were converted to chron time objects to ease with some calculations later. *Hour* was converted and formatted as numeric.  Finally, *Date* parameter was reduced by 12 characters because the time that was shown with the date was always a default of " 12:00:00 AM" (space included).
+
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+#####################################################################
+#Clean Data
+#####################################################################
+
+drops <- c("UNIXTime") #List of items to drop from Data.Frame
+Solar = Solar[ , !(names(Solar) %in% drops)]
+function.logger("Removed UNIXTime from Data.")
+
+#Convert date/times to date/time objects
+Solar$TimeSunRise = chron(times = as.character(TimeSunRise))
+Solar$TimeSunSet = chron(times = as.character(TimeSunSet))
+Solar$Hour = as.numeric(format(strptime(Time,"%H:%M:%S"),'%H')) #Show just the Hour
+Solar$Minute = format(strptime(Time, "%H:%M:%S"), '%M') #Show just the Minute
+Solar$Date = as.character(Solar$Date)
+Solar$Date = substr(Solar$Date,1, nchar(Solar$Date)-12)
+Solar$Date = chron(date = Solar$Date, #Strip time off - invalid data   ######FLAG
+                   format = "m/d/y") #Time component not valid, removed
+
+#Calculate Length of Day
+Solar$DayLength = Solar$TimeSunSet - Solar$TimeSunRise
+```
+
+The next section of code has not been utilized as of this writing. It may not be part of the final draft.
+```{r, message=FALSE, warning=FALSE}
+
+#Assignments for Averages Data
+RadH = (aggregate( Radiation ~ Hour, Solar, mean ))
+HumH = (aggregate( Humidity ~ Hour, Solar, mean ))
+PresH = (aggregate( Pressure ~ Hour, Solar, mean ))
+WinH = (aggregate( WindDirection.Degrees. ~ Hour, Solar, mean ))
+SpeedH = (aggregate( Speed ~ Hour, Solar, mean ))
+```
+
+Wind direction, by itself, was not very useful. How can we distinguish between 358 degrees and 2 degrees with the data given? The first step in trying to answer this question was to catagorize wind direction into the 4 major directions; North, East, South, and West. The following function, *function.WindDirToFactors* does this for us. The function also detects any wind directions that may be out of range and logs it. 
+
+```{r, message=FALSE, warning=FALSE}
+#Convert Wind Direction into Factors N, E, W, S based on values
+function.WindDirToFactors = function(degVect){
+  result = "ERROR"
+  if (degVect >= 315 || degVect < 45) { result = "N" }
+  if (degVect >= 45 && degVect < 135) { result = "E" }
+  if (degVect >= 135 && degVect < 225){ result = "S" }
+  if (degVect >= 225 && degVect < 315){ result = "W" }
+  
+  if (result == "Error"){
+    function.logger("Wind Direction out of Range", 1)
+  }
+  
+  return(result)
+}
+
+```
+
+Another helper function created is the *function.weekofyear*. This returns the actual week number of the year based on date. There are 52 weeks per year and week 1 starts on January 1.
+
+```{r, message=FALSE, warning=FALSE}
+
+#Convert Date to the Numbered Week of the Year
+function.weekofyear <- function(dt) {
+  as.numeric(format(as.Date(dt), "%W"))
+}
+```
+
+Finally, we utilized the above functions to modify the data. WeekNumber and WndDirFact is added to our dataset. 
+```{r, message=FALSE, warning=FALSE}
+#Calculate Week Number and Assign Wind Directions to Data
+WeekNum = rep(0, length(Solar$Date))
+WindDirection.Factors = rep(0, length(Solar$WindDirection.Degrees.)) #Place Holder
+for (i in 1:length(WindDirection.Factors)){
+  WindDirection.Factors[i] = function.WindDirToFactors(Solar$WindDirection.Degrees.[i])
+  WeekNum[i] = function.weekofyear(Solar$Date[i])
+}
+
+#Create New Column "WeekNum" and attach
+Solar$WeekNumber = WeekNum
+function.logger("Added WeekNumber column.", 1)
+
+WindDirection.Factors = as.factor((WindDirection.Factors))
+Solar$WndDirFact = WindDirection.Factors #add wind dir factors to original data.frame
+function.logger("Added WndDirFact column.", 1)
+
+#Reattach Solar for use of new columns without scoping
+detach(Solar)
+attach(Solar)
+```
+
+In order to aggregate data more easily, we utilized the data.table package. This package increases the functionallity of data frames so to speak. First, we make copies of our Solar data and call the copies Solar.dt, Solar.dt.byweek, and Solar.dt.byWkHr. 
+
+We decided to take the mean of each hour for that particular day and group the data in a data.table called Solar.dt. This enables us to do statistics by the hour, rather than roughly five minute intervals. Grouping data by hour helps reduce the complexity and makes the data more human readable as well. 
+
+Next, we grouped the data by week. This could potentially be useful to see longer term trends or slight overall upward or downward trennds week by week. 
+
+Finally, we grouped by Week and Hour combined. In other words, for a given 7 day week, all of the first hours of the day were averaged, all of the second hours of the day were averaged, etc. For example, we could extract the average of 7 days worth of noon data for week 39, or 7 days worth of 16:00 data on week 41. 
+
+We then ordered the data based on date and hour. 
+
+```{r, message=FALSE, warning=FALSE}
+#Aggregate Data
+
+#Using data.table for aggregtion features
+Solar.dt = data.table(Solar)
+Solar.dt.byweek = data.table(Solar)
+Solar.dt.byWkHr = data.table(Solar)
+
+#Group DATE with HOUR
+grp_cols = c(names(Solar)[11] , names(Solar[1])) #Columns to Group By
+Solar.dt = Solar.dt[,list(RadMean = mean(Radiation), 
+                            PresMean = mean(Pressure),
+                            TempMean = mean(Temperature), 
+                            HumMean = mean(Humidity),
+                            SpeedMean = mean(Speed),
+                            WeekNumMean = mean(WeekNumber)),
+                            by = grp_cols]
+
+#Group by WEEK
+grp_cols = c(names(Solar[14])) #Columns to Group By
+Solar.dt.byweek = Solar.dt.byweek[,list(RadMean = mean(Radiation), 
+                            PresMean = mean(Pressure),
+                            TempMean = mean(Temperature), 
+                            HumMean = mean(Humidity),
+                            SpeedMean = mean(Speed)),
+                            by = grp_cols]
+
+#Group by WEEK-HOUR
+grp_cols = c(names(Solar[14]), names(Solar[11])) #Columns to Group By
+Solar.dt.byWkHr = Solar.dt.byWkHr[,list(RadMean = mean(Radiation), 
+                            PresMean = mean(Pressure),
+                            TempMean = mean(Temperature), 
+                            HumMean = mean(Humidity),
+                            SpeedMean = mean(Speed)),
+                            by = grp_cols]
+
+
+#####################################################################
+#Order Data
+#####################################################################
+
+#Order Data
+Solar = Solar[order(Date),]
+Solar.dt = Solar.dt[order(Solar.dt$WeekNumMean),]
+Solar.dt.byweek = Solar.dt.byweek[order(Solar.dt.byweek$WeekNumber),]
+Solar.dt.byWkHr = Solar.dt.byWkHr[order(Solar.dt.byWkHr$WeekNumber, Solar.dt.byWkHr$Hour),]
+```
+
+To manage the statistics in an organized fashion, we chose to write the data out to multiple csv files. The files are very small making this a reasonable approach. Any team member can run this script and re-generate the files if needed. 
+
+```{r, message=FALSE, warning=FALSE}
+#####################################################################
+#Output .csv Files for Statistics
+#####################################################################
+write.csv(Solar, file = "Solar1.csv", row.names = FALSE)
+write.csv(Solar.dt, file = "Solar2.csv", row.names = FALSE)
+write.csv(Solar.dt.byweek, file = "Solar3.csv", row.names = FALSE)
+write.csv(Solar.dt.byWkHr, file = "Solar4.csv", row.names = FALSE)
+
+function.logger("Created Solar1.csv - Cleaned Version of Original", 1)
+function.logger("Created Solar2.csv - Average Values by Hour", 1)
+function.logger("Created Solar3.csv - Average Values by Week", 1)
+function.logger("Created Solar4.csv - Average Values by Week-Hour", 1)
+```
+
+For our records, we decided to record the runtime of this script using Sys.time function and log it as well. 
+
+```{r, message=FALSE, warning=FALSE}
+#Runtime Statistics - Goes at END OF FILE
+
+detach(Solar)
+EndTime = Sys.time()
+TotalTime = EndTime - StartTime
+
+RunTime = paste("Total Run Time = ", round(TotalTime,4), "seconds.")
+function.logger(RunTime)
+
+#####################################################################
+#End
+```
+
