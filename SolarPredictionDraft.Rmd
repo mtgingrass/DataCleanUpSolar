@@ -9,12 +9,6 @@ output:
   html_document: default
 ---
 
-## Introduction  
-This is the introduction section. Let's start here.  Blah blah more stuff. Another sentence and more stuff to fill the gap. Fix later. 
-
-#### Motivation for the Project  
-Why are we motivated to do this project...blah blah. New sentence.  
-
 #### Question to Answer  
 The goal is to use the historical data to correctly predict the levels of solar radiation.  Currently the best prediction using cross-validation was achieved by someone on Kaggle with a 55% accuracy.  
 
